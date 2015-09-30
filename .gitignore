@@ -4,3 +4,4 @@
 *.session
 webserver/etc/ssl
 webserver/etc/database/*
+engine/etc/issues.db

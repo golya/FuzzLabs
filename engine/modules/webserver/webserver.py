@@ -12,7 +12,6 @@ from flask import make_response
 from flask import Flask, make_response
 from pydispatch import dispatcher
 from classes import Event as ev
-from classes import DatabaseHandler as db
 
 __version__ = "2.1.0"
 
