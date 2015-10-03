@@ -12,6 +12,7 @@ from sqlalchemy.orm import relationship, backref
 from classes.database.Base import Base
 from classes.database.Engine import Engine
 from classes.database.Job import Job
+from classes.database.Issue import Issue
 
 # -----------------------------------------------------------------------------
 #
@@ -89,6 +90,14 @@ class DatabaseThread(threading.Thread):
     #
     # -------------------------------------------------------------------------
 
+    def handle_issue(self, db, engine, data):
+        if not engine or not data: return
+        # TODO
+
+    # -------------------------------------------------------------------------
+    #
+    # -------------------------------------------------------------------------
+
     def stop(self):
         self.running = False
 
@@ -121,6 +130,9 @@ class DatabaseThread(threading.Thread):
                     if task.get('item') == "job" and task.get('action') == "handle":
                         self.handle_job(db, task.get('engine'),
                                         task.get('active'), task.get('data'))
+                    if task.get('item') == "issue" and task.get('action') == "handle":
+                        self.handle_issue(db, task.get('engine'),
+                                          task.get('data'))
             except Queue.Empty:
                 pass
 

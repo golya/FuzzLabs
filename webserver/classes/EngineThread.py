@@ -125,6 +125,36 @@ class EngineThread(threading.Thread):
         })
 
         return True
+    # -------------------------------------------------------------------------
+    #
+    # -------------------------------------------------------------------------
+
+    def process_issues(self):
+        d = self.do_get(self.engine.address,
+                        self.engine.port,
+                        "/issues",
+                        self.engine.secret,
+                        3)
+
+        if d == None or d.get('status') == None or d.get('status') == "error":
+            syslog.syslog(syslog.LOG_ERR,
+                          "engine %s offline, disabling" % self.engine.name)
+            self.enqueue({
+                "item":   "engine",
+                "action": "disable",
+                "data":   self.engine
+            })
+            return False
+        if not d.get('data'): return True
+
+        issues = d.get('data')
+
+        for issue in issues:
+            # TODO:
+            #  1. fetch issue by ID from engine
+            #  2. store issue to local database
+            #  3. if successfully stored delete issue by ID on engine
+            pass
 
     # -------------------------------------------------------------------------
     #
