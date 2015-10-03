@@ -6,7 +6,6 @@ pip install PyDispatcher
 pip install Flask
 pip install Flask-SQLAlchemy
 
-
 # For development
 # apt-get install git pylint pychecker valgrind 
 

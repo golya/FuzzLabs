@@ -87,59 +87,6 @@ class system_stats:
 #
 # =============================================================================
 
-class jobs_status_collector(threading.Thread):
-
-    # -------------------------------------------------------------------------
-    #
-    # -------------------------------------------------------------------------
-
-    def __init__(self, config):
-        threading.Thread.__init__(self)
-        self.config = config
-
-    # -------------------------------------------------------------------------
-    #
-    # -------------------------------------------------------------------------
-
-    def __handle_rsp_jobs_list(self, sender, data = ""):
-        global jobs_status
-        jobs_status = data
-
-        if self.config['general']['debug'] >= 1:
-            syslog.syslog(syslog.LOG_INFO, "jobs status received: %s" %
-                          str(jobs_status))
-
-    # -------------------------------------------------------------------------
-    #
-    # -------------------------------------------------------------------------
-
-    def get(self):
-        global jobs_status
-        return jobs_status
-
-    # -------------------------------------------------------------------------
-    #
-    # -------------------------------------------------------------------------
-
-    def run(self):
-        syslog.syslog(syslog.LOG_INFO, "jobs status collector started")
-        dispatcher.connect(self.__handle_rsp_jobs_list,
-                           signal=ev.Event.EVENT__RSP_JOBS_LIST,
-                           sender=dispatcher.Any)
-        while True:
-            try:
-                dispatcher.send(signal=ev.Event.EVENT__REQ_JOBS_LIST,
-                                sender="WEBSERVER")
-            except Exception, ex:
-                syslog.syslog(syslog.LOG_ERR,
-                              "failed to send job list request event (%s)" %
-                              str(ex))
-            time.sleep(3)
-
-# =============================================================================
-#
-# =============================================================================
-
 class archives_collector(threading.Thread):
 
     # -------------------------------------------------------------------------
@@ -188,6 +135,59 @@ class archives_collector(threading.Thread):
                               "failed to send archives request event (%s)" %
                               str(ex))
             time.sleep(5)
+
+# =============================================================================
+#
+# =============================================================================
+
+class jobs_status_collector(threading.Thread):
+
+    # -------------------------------------------------------------------------
+    #
+    # -------------------------------------------------------------------------
+
+    def __init__(self, config):
+        threading.Thread.__init__(self)
+        self.config = config
+
+    # -------------------------------------------------------------------------
+    #
+    # -------------------------------------------------------------------------
+
+    def __handle_rsp_jobs_list(self, sender, data = ""):
+        global jobs_status
+        jobs_status = data
+
+        if self.config['general']['debug'] >= 1:
+            syslog.syslog(syslog.LOG_INFO, "jobs status received: %s" %
+                          str(jobs_status))
+
+    # -------------------------------------------------------------------------
+    #
+    # -------------------------------------------------------------------------
+
+    def get(self):
+        global jobs_status
+        return jobs_status
+
+    # -------------------------------------------------------------------------
+    #
+    # -------------------------------------------------------------------------
+
+    def run(self):
+        syslog.syslog(syslog.LOG_INFO, "jobs status collector started")
+        dispatcher.connect(self.__handle_rsp_jobs_list,
+                           signal=ev.Event.EVENT__RSP_JOBS_LIST,
+                           sender=dispatcher.Any)
+        while True:
+            try:
+                dispatcher.send(signal=ev.Event.EVENT__REQ_JOBS_LIST,
+                                sender="WEBSERVER")
+            except Exception, ex:
+                syslog.syslog(syslog.LOG_ERR,
+                              "failed to send job list request event (%s)" %
+                              str(ex))
+            time.sleep(3)
 
 # =============================================================================
 #
@@ -539,6 +539,8 @@ class webserver(threading.Thread):
     @validate
     def r_delete_issue_by_id(id):
         global database
+        syslog.syslog(syslog.LOG_INFO,
+                      "delete request received for issue: %s" % id)
         try:
             database.deleteIssue(id)
         except Exception, ex:
