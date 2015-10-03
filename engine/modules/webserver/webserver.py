@@ -12,9 +12,11 @@ from flask import make_response
 from flask import Flask, make_response
 from pydispatch import dispatcher
 from classes import Event as ev
+from classes import DatabaseHandler as db
 
 __version__ = "2.1.0"
 
+database = None
 fuzzlabs_root = None
 
 # -----------------------------------------------------------------------------
@@ -324,6 +326,7 @@ class webserver(threading.Thread):
 
     def __init__(self, root, config):
         threading.Thread.__init__(self)
+        global database
         global fuzzlabs_root
         self.root = fuzzlabs_root = root
         self.config = config
@@ -332,6 +335,9 @@ class webserver(threading.Thread):
         self.server = None
         self.jobs_collector = None
         self.archives_collector = None
+
+        database = db.DatabaseHandler(self.config, 
+                                      self.root)
 
         syslog.openlog(logoption=syslog.LOG_PID, facility=syslog.LOG_DAEMON)
 
@@ -492,8 +498,16 @@ class webserver(threading.Thread):
     @apiheaders
     @validate
     def r_get_issues():
-        data = []
-        r = Response("success", "issues", data).get()
+        global database
+        issues = []
+        try:
+            issues = database.loadIssues()
+        except Exception, ex:
+            syslog.syslog(syslog.LOG_ERR,
+                          "failed to retrieve issues: %s" % str(ex))
+            r = Response("error", "issues").get()
+            return r
+        r = Response("success", "issues", issues).get()
         return r
 
     # -------------------------------------------------------------------------
@@ -504,7 +518,33 @@ class webserver(threading.Thread):
     @apiheaders
     @validate
     def r_get_issue_by_id(id):
-        r = Response("success", "issue").get()
+        global database
+        issue = None
+        try:
+            issue = database.loadIssue(id)
+        except Exception, ex:
+            syslog.syslog(syslog.LOG_ERR,
+                          "failed to retrieve issue: %s" % str(ex))
+            r = Response("error", "issues").get()
+            return r
+        r = Response("success", "issue", database.loadIssue(id)).get()
+        return r
+
+    # -------------------------------------------------------------------------
+    #
+    # -------------------------------------------------------------------------
+
+    @app.route("/issues/<id>/delete", methods=['GET'])
+    @apiheaders
+    @validate
+    def r_delete_issue_by_id(id):
+        global database
+        try:
+            database.deleteIssue(id)
+        except Exception, ex:
+            r = Response("error", "delete").get()
+            return r
+        r = Response("success", "deleted").get()
         return r
 
     # -------------------------------------------------------------------------
@@ -527,7 +567,9 @@ class webserver(threading.Thread):
     @apiheaders
     @validate
     def r_engine_status():
-        return json.dumps({})
+        # TBD
+        r = Response("error", "not supported").get()
+        return r
 
     # -------------------------------------------------------------------------
     #

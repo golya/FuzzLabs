@@ -1,4 +1,5 @@
 import json
+import time
 import sqlite3
 import sqlalchemy
 from sqlalchemy import create_engine
@@ -14,38 +15,42 @@ class DatabaseHandler:
 
     def __init__(self, config = None, root = None, job_id = None):
 
-        if config == None or root == None or job_id == None:
+        if config == None or root == None:
             return
 
         self.config   = config
         self.root     = root
-        self.job_id   = job_id
 
         self.engine   = create_engine('sqlite:///' + \
                                       self.root + '/' + \
                                       self.config['general']['database'], 
                                       echo=False)
         Session = sessionmaker(bind=self.engine)
-        db = Session()
+        self.db = Session()
         Base.Base.metadata.create_all(self.engine)
-        db.commit()
+        self.db.commit()
 
     # -------------------------------------------------------------------------
     #
     # -------------------------------------------------------------------------
 
-    def saveCrashDetails(self, data):
-        """
-        TODO: IMPLEMENT
+    def saveIssue(self, data):
+        if not data: return False
 
-        if not self.dbinit: return False
-        stmt = "INSERT INTO issues VALUES (?, ?)"
-        try:
-            self.cursor.execute(stmt, (self.job_id, data))
-            self.database.commit()
-        except Exception, ex:
-            raise Exception(ex)
-        """
+        i_info = {
+                 "target":       data.get("target"),
+                 "name":         data.get("name"),
+                 "mutant_index": data.get("mutant_index"),
+                 "process":      data.get("process_status")
+                 }
+
+        n_issue = Issue(job_id=data.get("job_id"),
+                        time=time.time(),
+                        info=json.dumps(i_info),
+                        payload=data.get("request"))
+
+        self.db.add(n_issue)
+        self.db.commit()
 
         return True
 
@@ -53,18 +58,52 @@ class DatabaseHandler:
     #
     # -------------------------------------------------------------------------
 
-    def loadCrashDetails(self):
-        if not self.dbinit: return False
-        issue_list = []
+    def loadIssues(self):
         """
-        TODO: IMPLEMENT
+        Returns a simple list of all issues in the database.
+        """
 
-        stmt = "SELECT * FROM issues"
-        try:
-            for issue in self.cursor.execute(stmt):
-                issue_list.append(issue)
-        except Exception, ex:
-            raise Exception(ex)
-        """
+        issue_list = []
+        issues = self.db.query(Issue).all()
+        for issue in issues:
+            i_data = {
+                     "id":     issue.id,
+                     "job_id": issue.job_id,
+                     "time":   issue.time
+                     }
+            issue_list.append(i_data)
         return issue_list
+
+    # -------------------------------------------------------------------------
+    #
+    # -------------------------------------------------------------------------
+
+    def loadIssue(self, id):
+        """
+        Returns full details of an issues.
+        """
+
+        issue = self.db.query(Issue).filter_by(id=id).first()
+        if not issue: return {}
+        i_data = {
+                 "id":      issue.id,
+                 "job_id":  issue.job_id,
+                 "time":    issue.time,
+                 "info":    json.loads(issue.info),
+                 "payload": issue.payload
+                 }
+        return i_data
+
+    # -------------------------------------------------------------------------
+    #
+    # -------------------------------------------------------------------------
+
+    def deleteIssue(self, id):
+        """
+        Delete an issue from the database.
+        """
+
+        issue = self.db.query(Issue).filter_by(id=id).first()
+        self.db.delete(issue)
+        self.db.commit()
 

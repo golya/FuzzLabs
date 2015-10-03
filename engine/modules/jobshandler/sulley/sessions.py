@@ -878,7 +878,7 @@ class session (pgraph.graph):
         crash_data["process_status"] = process_status
 
         try:
-            self.database.saveCrashDetails(json.dumps(crash_data))
+            self.database.saveIssue(crash_data)
         except Exception, ex:
             syslog.syslog(syslog.LOG_ERR, self.session_id +
                               ": failed to save crash data (%s)" % str(ex))
