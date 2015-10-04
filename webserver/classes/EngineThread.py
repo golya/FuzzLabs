@@ -66,6 +66,19 @@ class EngineThread(threading.Thread):
     #
     # -------------------------------------------------------------------------
 
+    def engine_offline(self):
+        syslog.syslog(syslog.LOG_ERR,
+                      "engine %s offline, disabling" % self.engine.name)
+        self.enqueue({
+            "item":   "engine",
+            "action": "disable",
+            "data":   self.engine
+        })
+
+    # -------------------------------------------------------------------------
+    #
+    # -------------------------------------------------------------------------
+
     def process_jobs(self):
         d = self.do_get(self.engine.address,
                         self.engine.port,
@@ -74,13 +87,7 @@ class EngineThread(threading.Thread):
                         3)
 
         if d == None or d.get('status') == None or d.get('status') == "error":
-            syslog.syslog(syslog.LOG_ERR,
-                          "engine %s offline, disabling" % self.engine.name)
-            self.enqueue({
-                "item":   "engine",
-                "action": "disable",
-                "data":   self.engine
-            })
+            self.engine_offline()
             return False
         if not d.get('data'): return True
 
@@ -106,13 +113,7 @@ class EngineThread(threading.Thread):
                         3)
 
         if d == None or d.get('status') == None or d.get('status') == "error":
-            syslog.syslog(syslog.LOG_ERR,
-                          "engine %s offline, disabling" % self.engine.name)
-            self.enqueue({
-                "item":   "engine",
-                "action": "disable",
-                "data":   self.engine
-            })
+            self.engine_offline()
             return False
         if not d.get('data'): return True
 
@@ -125,6 +126,7 @@ class EngineThread(threading.Thread):
         })
 
         return True
+
     # -------------------------------------------------------------------------
     #
     # -------------------------------------------------------------------------
@@ -137,24 +139,37 @@ class EngineThread(threading.Thread):
                         3)
 
         if d == None or d.get('status') == None or d.get('status') == "error":
-            syslog.syslog(syslog.LOG_ERR,
-                          "engine %s offline, disabling" % self.engine.name)
-            self.enqueue({
-                "item":   "engine",
-                "action": "disable",
-                "data":   self.engine
-            })
+            self.engine_offline()
             return False
         if not d.get('data'): return True
 
         issues = d.get('data')
 
         for issue in issues:
-            # TODO:
-            #  1. fetch issue by ID from engine
-            #  2. store issue to local database
-            #  3. if successfully stored delete issue by ID on engine
-            pass
+            if not issue.get('id'): continue
+            i = self.do_get(self.engine.address,
+                            self.engine.port,
+                            "/issues/" + str(issue.get('id')),
+                            self.engine.secret,
+                            3)
+            if i == None or i.get('status') == None or \
+               i.get('status') == "error" or not i.get('data'):
+                self.engine_offline()
+                return False
+
+            self.enqueue({
+                "item":   "issue",
+                "action": "handle",
+                "engine": self.engine,
+                "data":   i.get('data')
+            })
+
+            i = self.do_get(self.engine.address,
+                            self.engine.port,
+                            "/issues/" + str(issue.get('id')) + "/delete",
+                            self.engine.secret,
+                            3)
+
 
     # -------------------------------------------------------------------------
     #
@@ -194,6 +209,7 @@ class EngineThread(threading.Thread):
         while self.running:
             if not self.process_jobs():    self.running = False
             if not self.process_archive(): self.running = False
+            if not self.process_issues():  self.running = False
             time.sleep(self.config["general"]["data_collect_interval"])
 
         self.clear_thread_queue()

@@ -92,7 +92,32 @@ class DatabaseThread(threading.Thread):
 
     def handle_issue(self, db, engine, data):
         if not engine or not data: return
-        # TODO
+        data["engine"] = engine.id
+
+        """
+        id        = Column(Integer, primary_key=True)
+        job_id    = Column(String(32))
+        time      = Column(Integer)
+        info      = Column(Text)
+        payload   = Column(Text)
+        """
+
+        try:
+            n_issue = Issue(job_id  = data.get('job_id'),
+                            time    = data.get('time'),
+                            info    = json.dumps(data.get('info')),
+                            payload = data.get('payload'))
+        except Exception, ex: 
+            syslog.syslog(syslog.LOG_ERR,
+                          "failed to process new issue (%s)" % str(ex))
+            return
+
+        try:
+            db.add(n_issue)
+            db.commit()
+        except Exception, ex: 
+            syslog.syslog(syslog.LOG_ERR,
+                          "failed to store new issue (%s)" % str(ex))
 
     # -------------------------------------------------------------------------
     #
