@@ -108,16 +108,6 @@ class session (pgraph.graph):
         self.pre_send            = None
         self.post_send           = None
 
-        # State reason holds information about why the job is in a given
-        # state. For example, a job can be in a paused state because the
-        # user requested the pause, or, because of an error, e.g.: no
-        # connection to the agent, or the target has crashed.
-        # Similarly with the running state: it can be because a user 
-        # requested a job or because the scheduler started a job.
-        # (scheduler is not yet available, but planned)
-
-        self.state_reason        = ""
-
         if settings.get('skip') != None: 
             self.skip = settings['skip']
         if settings.get('sleep_time') != None: 
@@ -227,7 +217,6 @@ class session (pgraph.graph):
         s_data = {"id": self.session_id,
                   "name": current_name,
                   "state": state,
-                  "state_reason": self.state_reason,
                   "crashes": self.crash_count,
                   "warnings": self.warning_count,
                   "progress": progress_total,
@@ -587,16 +576,16 @@ class session (pgraph.graph):
 
                     self.transport_media.disconnect()
 
+                    # serialize the current session state to disk.
+
+                    self.export_file()
+
                     # delay in between test cases.
 
                     if self.config['general']['debug'] > 2:
                         syslog.syslog(syslog.LOG_INFO, self.session_id + 
                                           ": sleeping for %f seconds" % self.sleep_time )
                     time.sleep(self.sleep_time)
-
-                    # serialize the current session state to disk.
-
-                    self.export_file()
 
             # recursively fuzz the remainder of the nodes in the session graph.
 
@@ -764,11 +753,6 @@ class session (pgraph.graph):
 
         data = None
 
-        try:
-            self.internal_callback(node)
-        except Exception, ex:
-            syslog.syslog(syslog.LOG_ERR, self.session_id + ": " + "failed to store internal state (%s)" % str(ex))
-
         # if the edge has a callback, process it. the callback has the option to render 
         # the node, modify it and return.
 
@@ -776,12 +760,20 @@ class session (pgraph.graph):
             data = edge.callback(self, node, edge, sock)
 
         if self.config['general']['debug'] > 1:
-            syslog.syslog(syslog.LOG_INFO, self.session_id + ": transmitting [%d.%d]" 
-                              % (node.id, self.total_mutant_index) )
+            syslog.syslog(syslog.LOG_INFO,
+                          self.session_id + ": transmitting [%d.%d]" %\
+                          (node.id, self.total_mutant_index))
 
         # if no data was returned by the callback, render the node here.
         if not data:
             data = node.render()
+
+        try:
+            self.internal_callback(data)
+        except Exception, ex:
+            syslog.syslog(syslog.LOG_ERR,
+                          self.session_id + ": " +\
+                          "failed to store internal state (%s)" % str(ex))
 
         try:
             self.transport_media.send(data)
@@ -811,13 +803,14 @@ class session (pgraph.graph):
     #
     # -----------------------------------------------------------------------------------
 
-    def internal_callback(self, node):
+    def internal_callback(self, data):
         node_data = ""
         try:
-            node_data = str(base64.b64encode(node.render()))
+            node_data = str(base64.b64encode(data))
         except Exception, ex:
-            syslog.syslog(syslog.LOG_ERR, self.session_id + ": failed to render node data when" + \
-                                                " saving status (%s)" % str(ex))
+            syslog.syslog(syslog.LOG_ERR,
+                          self.session_id + ": failed to render node data when" +\
+                          " saving status (%s)" % str(ex))
 
         try:
             self.previous_sent = self.current_sent
@@ -830,7 +823,9 @@ class session (pgraph.graph):
                 "request": node_data
             }
         except Exception, ex:
-            syslog.syslog(syslog.LOG_ERR, self.session_id + ": failed to store session status (%s)" % str(ex))
+            syslog.syslog(syslog.LOG_ERR,
+                          self.session_id + ": failed to store session status (%s)" %\
+                          str(ex))
 
     # -----------------------------------------------------------------------------------
     #
