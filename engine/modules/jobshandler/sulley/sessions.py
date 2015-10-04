@@ -510,6 +510,12 @@ class session(pgraph.graph):
 
                 # make a record in the session that a mutation was made.
 
+                # TODO: THIS SHOULD BE CHANGED TO WORK AS ONE OF THE WAYS BELOW:
+                #  a) PREFERRED: Send out a non-mutated request (index 0) in advance so that 
+                #     the first mutation will indeed have the index of 1.
+                #  b) LESS PREFERRED: Only increment the mutant index after a mutation.
+                #  c) LEAST PREFERRED: Start counting from -1
+
                 self.total_mutant_index += 1
 
                 # if we've hit the restart interval, restart the target.
@@ -669,6 +675,14 @@ class session(pgraph.graph):
 
         data = None
 
+        # if no data was returned by the callback, render the node here.
+        try:
+            data = node.render()
+        except Exception, ex:
+            syslog.syslog(syslog.LOG_ERR,
+                          "failed to render node for transmit: %s" % str(ex))
+            return False
+
         # if the edge has a callback, process it. the callback has the option to render 
         # the node, modify it and return.
 
@@ -681,18 +695,7 @@ class session(pgraph.graph):
                               "failed to execute callback: %s" % str(ex))
                 return False
 
-        # if no data was returned by the callback, render the node here.
-        if not data:
-            try:
-                data = node.render()
-            except Exception, ex:
-                syslog.syslog(syslog.LOG_ERR, 
-                              "failed to render node for transmit: %s" % str(ex))
-                return False
-
-        # syslog.syslog(syslog.LOG_INFO, "!!!!!!!! 1: " + str(data))
         self.internal_callback(data)
-        # syslog.syslog(syslog.LOG_INFO, "!!!!!!!! 2: " + str(data))
 
         try:
             self.transport_media.send(data)
@@ -707,7 +710,7 @@ class session(pgraph.graph):
         # TODO: check to make sure the receive timeout is not too long...
         try:
             self.last_recv = self.transport_media.recv(10000)
-        except Exception, e:
+        except Exception, ex:
             self.last_recv = ""
 
         if len(self.last_recv) > 0:
@@ -725,14 +728,15 @@ class session(pgraph.graph):
     #
     # -----------------------------------------------------------------------------------
 
-    def internal_callback(self, data):
+    def internal_callback(self, data = None):
         node_data = ""
-        try:
-            node_data = str(base64.b64encode(data))
-        except Exception, ex:
-            syslog.syslog(syslog.LOG_ERR,
-                          self.session_id + ": failed to render node data when" +\
-                          " saving status (%s)" % str(ex))
+        if data:
+            try:
+                node_data = base64.b64encode(str(data))
+            except Exception, ex:
+                syslog.syslog(syslog.LOG_ERR,
+                              self.session_id + ": failed to render node data when" +\
+                              " saving status (%s)" % str(ex))
 
         try:
             self.previous_sent = self.current_sent
@@ -740,7 +744,7 @@ class session(pgraph.graph):
                 "job_id": self.session_id,
                 "time": time.time(),
                 "name": str(self.fuzz_node.name),
-                "mutant_index": self.fuzz_node.mutant_index,
+                "mutant_index": self.total_mutant_index,
                 "process_status": {},
                 "request": node_data
             }
@@ -849,18 +853,23 @@ class session(pgraph.graph):
         self.crashing_primitives[self.fuzz_node.mutant] = \
             self.crashing_primitives.get(self.fuzz_node.mutant,0) +1
 
-        # If we could not make a connection to the target then it was the
-        # previous request (or one of the prev. requests) that resulted in
-        # the crash of the service. As we cannot be completely sure which
-        # one of the prev. requests caused the crash, the best we can do
-        # is to log the previous request.
+        # If we could not make a connection to the target then it was the previous
+        # request (or one of the prev. requests) that resulted in the crash of the
+        # service. As we cannot be completely sure which one of the prev. requests
+        # caused the crash, the best we can do is to log the previous request.
+        # At the point of the connection the previous request is still in 
+        # self.current_sent so that is the one to be used.
 
         if event == "fail_connection":
-            self.dump_crash_data(self.previous_sent, p_status)
-            if process_running:
-                self.warning_count = self.warning_count + 1
+            if self.current_sent:
+                self.dump_crash_data(self.current_sent, p_status)
+                if process_running:
+                    self.warning_count = self.warning_count + 1
+                else:
+                    self.crash_count = self.crash_count + 1
             else:
-                self.crash_count = self.crash_count + 1
+                # Target offline?
+                pass
 
         # If we haven't received anything it is very likely that the cause
         # of the issue is the current request, therefore we save that.
@@ -876,7 +885,8 @@ class session(pgraph.graph):
         # was one of the previous requests to cause the issue.
 
         else:
-            self.dump_crash_data(self.previous_sent, p_status)
+            if self.previous_sent:
+                self.dump_crash_data(self.previous_sent, p_status)
             if process_running:
                 self.warning_count = self.warning_count + 1
             else:
