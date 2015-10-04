@@ -540,8 +540,6 @@ class session (pgraph.graph):
                                 syslog.syslog(syslog.LOG_ERR, self.session_id + 
                                                   ": failed to transmit a node up the " +
                                                   "path (%s)" % str(ex))
-                            self.handle_crash("fail_send", 
-                                              "failed to transmit a node up the path, possible crash?")
                             continue
 
                         # now send the current node we are fuzzing.
@@ -553,8 +551,6 @@ class session (pgraph.graph):
                             if self.config['general']['debug'] > 0:
                                 syslog.syslog(syslog.LOG_ERR, self.session_id + 
                                                   ": failed transmitting fuzz node (%s)" % str(ex))
-                            self.handle_crash("fail_send", 
-                                              "failed transmitting fuzz node, possible crash?")
                             continue
 
                         # if we reach this point the send was successful for break out 
@@ -782,7 +778,7 @@ class session (pgraph.graph):
         except Exception, ex:
             if self.config['general']['debug'] > 0:
                 syslog.syslog(syslog.LOG_WARNING, self.session_id + ": failed to send, socket error: " + str(ex))
-            self.handle_crash("fail_receive", "failed to send data, possible crash?")
+            self.handle_crash("fail_send", "failed to send data, possible crash?")
 
         # TODO: check to make sure the receive timeout is not too long...
         try:
