@@ -407,7 +407,7 @@ class webserver(threading.Thread):
     @validate
     def r_jobs_delete(job_id):
         syslog.syslog(syslog.LOG_INFO,
-                      "delete request received for job: %s" % job_id)
+                      "stop request received for job: %s" % job_id)
         dispatcher.send(signal=ev.Event.EVENT__REQ_JOB_DELETE,
                         sender="WEBSERVER",
                         data=job_id)

@@ -27,13 +27,13 @@ from classes import DatabaseHandler as db
 #
 # =======================================================================================
 
-class connection (pgraph.edge.edge):
+class connection(pgraph.edge.edge):
 
     # -----------------------------------------------------------------------------------
     #
     # -----------------------------------------------------------------------------------
 
-    def __init__ (self, src, dst, callback=None):
+    def __init__(self, src, dst, callback=None):
         '''
         Extends pgraph.edge with a callback option. This allows us to register a 
         function to call between node transmissions to implement functionality such as
@@ -65,7 +65,7 @@ class connection (pgraph.edge.edge):
 #
 # =======================================================================================
 
-class session (pgraph.graph):
+class session(pgraph.graph):
 
     # -----------------------------------------------------------------------------------
     #
@@ -230,7 +230,7 @@ class session (pgraph.graph):
     #
     # -----------------------------------------------------------------------------------
 
-    def add_node (self, node):
+    def add_node(self, node):
         '''
         Add a pgraph node to the graph. We overload this routine to automatically 
         generate and assign an ID whenever a node is added.
@@ -251,7 +251,7 @@ class session (pgraph.graph):
     #
     # -----------------------------------------------------------------------------------
 
-    def add_target (self, target):
+    def add_target(self, target):
         '''
         Add a target to the session.
 
@@ -267,7 +267,7 @@ class session (pgraph.graph):
     #
     # -----------------------------------------------------------------------------------
 
-    def connect (self, src, dst=None, callback=None):
+    def connect(self, src, dst=None, callback=None):
         '''
         Create a connection between the two requests (nodes) and register an optional 
         callback to process in between transmissions of the source and destination
@@ -339,7 +339,7 @@ class session (pgraph.graph):
     #
     # -----------------------------------------------------------------------------------
 
-    def export_file (self):
+    def export_file(self):
         '''
         Dump various object values to disk.
 
@@ -372,260 +372,7 @@ class session (pgraph.graph):
     #
     # -----------------------------------------------------------------------------------
 
-    def add_agent(self, a_details):
-        if "address" in a_details and "port" in a_details and "command" in a_details:
-            self.agent_settings = a_details
-            return True
-        return False
-
-    # -----------------------------------------------------------------------------------
-    #
-    # -----------------------------------------------------------------------------------
-
-    def fuzz (self, this_node=None, path=[]):
-        '''
-        Call this routine to get the ball rolling. No arguments are necessary as they are
-        both utilized internally during the recursive traversal of the session graph.
-
-        @type  this_node: request (node)
-        @param this_node: (Optional, def=None) Current node that is being fuzzed.
-        @type  path:      List
-        @param path:      (Optional, def=[]) Nodes along the path to the current one.
-        '''
-
-        # if no node is specified, we start from root and initialize the session.
-        if not this_node:
-            # we can't fuzz if we don't have at least one target and one request.
-            if not self.transport_media.media_target():
-                syslog.syslog(syslog.LOG_ERR, self.session_id + \
-                                  ": no target specified for session")
-                return
-
-            if not self.edges_from(self.root.id):
-                syslog.syslog(syslog.LOG_ERR, self.session_id + \
-                                  ": no request specified for session")
-                return
-
-            this_node = self.root
-
-            self.total_mutant_index  = 0
-            self.total_num_mutations = self.num_mutations()
-
-        # If no errors above and not already connected to the agent, initialize the
-        # agent connection.
-        # If the agent cannot be initialized make sure the user is aware of it.
-
-        if self.agent == None and self.agent_settings != None:
-            try:
-                self.agent = agent(self.config, self.session_id, self.agent_settings)
-                self.agent.connect()
-            except Exception, ex:
-                syslog.syslog(syslog.LOG_ERR, self.session_id +
-                              ": failed to establish agent connection (%s)" % str(ex))
-                self.finished_flag = True
-                self.stop_flag = True
-                return
-
-        # Get the agent to execute 
-            try:
-                self.agent.start()
-            except Exception, ex:
-                syslog.syslog(syslog.LOG_ERR, self.session_id +
-                              ": agent failed to execute command (%s)" % str(ex))
-                self.finished_flag = True
-                self.stop_flag = True
-                return
-
-            syslog.syslog(syslog.LOG_INFO, self.session_id +
-                          ": process started, waiting 3 seconds...")
-            time.sleep(3)
-
-        # step through every edge from the current node.
-
-        for edge in self.edges_from(this_node.id):
-
-            if self.stop_flag: return 
-
-            # the destination node is the one actually being fuzzed.
-            self.fuzz_node = self.nodes[edge.dst]
-            num_mutations  = self.fuzz_node.num_mutations()
-
-            # keep track of the path as we fuzz through it, don't count the root node.
-            # we keep track of edges as opposed to nodes because if there is more then 
-            # one path through a set of given nodes we don't want any ambiguity.
-            path.append(edge)
-
-            current_path  = " -> ".join([self.nodes[e.src].name for e in path[1:]])
-            current_path += " -> %s" % self.fuzz_node.name
-
-            if self.config['general']['debug'] > 1:
-                syslog.syslog(syslog.LOG_INFO, self.session_id + 
-                                  ": fuzz path: %s, fuzzed %d of %d total cases" 
-                                  % (current_path, self.total_mutant_index, 
-                                  self.total_num_mutations) )
-
-            done_with_fuzz_node = False
-
-            # loop through all possible mutations of the fuzz node.
-
-            while not done_with_fuzz_node and not self.stop_flag:
-                # if we need to pause, do so.
-                self.pause()
-
-                # If we have exhausted the mutations of the fuzz node, break out of the 
-                # while(1). 
-                # Note: when mutate() returns False, the node has been reverted to the 
-                # default (valid) state.
-
-                if not self.fuzz_node.mutate():
-                    if self.config['general']['debug'] > 0:
-                        syslog.syslog(syslog.LOG_INFO, self.session_id + 
-                                          ": all possible mutations exhausted")
-                    done_with_fuzz_node = True
-                    continue
-
-                # make a record in the session that a mutation was made.
-
-                self.total_mutant_index += 1
-
-                # if we've hit the restart interval, restart the target.
-
-                if self.restart_interval and self.total_mutant_index % self.restart_interval == 0:
-                    if self.config['general']['debug'] > 0:
-                        syslog.syslog(syslog.LOG_WARNING, self.session_id + ": restart interval reached")
-                    # TODO: this has to be updated properly...
-
-                    if self.agent != None and self.agent_settings != None:
-                        self.agent.start()
-
-                # if we don't need to skip the current test case.
-
-                if self.total_mutant_index > self.skip:
-                    if self.config['general']['debug'] > 1:
-                        syslog.syslog(syslog.LOG_INFO, self.session_id + ": fuzzing %d / %d" 
-                                          % (self.fuzz_node.mutant_index, num_mutations))
-
-                    # attempt to complete a fuzz transmission. keep trying until we are 
-                    # successful, whenever a failure occurs, restart the target.
-
-                    while not self.stop_flag:
-                        try:
-                            self.transport_media.connect()
-                        except Exception, ex:
-                            syslog.syslog(syslog.LOG_ERR, self.session_id + ": " + str(ex))
-                            self.handle_crash("fail_connection", 
-                                              "failed to connect to target, possible crash?")
-
-                        # if the user registered a pre-send function, pass it the sock 
-                        # and let it do the deed.
-
-                        try:
-                            if self.pre_send: self.pre_send(self.transport_media.media_socket())
-                        except Exception, ex:
-                            if self.config['general']['debug'] > 0:
-                                syslog.syslog(syslog.LOG_ERR, self.session_id + ": pre_send() failed (%s)" % str(ex))
-                            self.handle_crash("fail_send", 
-                                              "pre_send() failed, possible crash?")
-                            continue
-
-                        # send out valid requests for each node in the current path up to 
-                        # the node we are fuzzing.
-
-                        try:
-                            for e in path[:-1]:
-                                node = self.nodes[e.dst]
-                                self.transmit(node, e)
-                        except Exception, ex:
-                            if self.config['general']['debug'] > 0:
-                                syslog.syslog(syslog.LOG_ERR, self.session_id + 
-                                                  ": failed to transmit a node up the " +
-                                                  "path (%s)" % str(ex))
-                            continue
-
-                        # now send the current node we are fuzzing.
-
-                        try:
-                            self.transmit(self.fuzz_node, edge)
-                        except Exception, ex:
-                            if self.config['general']['debug'] > 0:
-                                syslog.syslog(syslog.LOG_ERR, self.session_id + 
-                                                  ": failed transmitting fuzz node (%s)" % str(ex))
-                            continue
-
-                        # if we reach this point the send was successful for break out 
-                        # of the while(1).
-
-                        break
-
-                    try:
-                        if self.post_send: self.post_send(self.transport_media.media_socket())
-                    except Exception, ex:
-                        if self.config['general']['debug'] > 0:
-                            syslog.syslog(syslog.LOG_ERR, self.session_id + 
-                                              ": post_send() failed %s" % str(ex))
-                        self.handle_crash("fail_send", 
-                                          "post_send() failed, possible crash?")
-                        continue
-
-                    # done with the socket.
-
-                    self.transport_media.disconnect()
-
-                    # serialize the current session state to disk.
-
-                    self.export_file()
-
-                    # delay in between test cases.
-
-                    if self.config['general']['debug'] > 2:
-                        syslog.syslog(syslog.LOG_INFO, self.session_id + 
-                                          ": sleeping for %f seconds" % self.sleep_time )
-                    time.sleep(self.sleep_time)
-
-            # recursively fuzz the remainder of the nodes in the session graph.
-
-            self.fuzz(self.fuzz_node, path)
-
-        # finished with the last node on the path, pop it off the path stack.
-
-        if path:
-            path.pop()
-
-        if self.total_mutant_index == self.total_num_mutations:
-            self.finished_flag = True
-            self.stop_flag = True
-            syslog.syslog(syslog.LOG_INFO, self.session_id + ": job finished")
-            if self.agent != None and self.agent_settings != None:
-                self.agent_cleanup()
-
-    # -----------------------------------------------------------------------------------
-    #
-    # -----------------------------------------------------------------------------------
-
-    def agent_cleanup(self):
-        # If we have an agent, try to clean that up properly.
-
-        try:
-            if not self.agent.kill():
-                syslog.syslog(syslog.LOG_ERR, self.session_id +
-                              ": failed to terminate remote process")
-            self.agent.disconnect()
-            self.agent = None
-            self.agent_settings = None
-        except Exception, ex:
-            syslog.syslog(syslog.LOG_ERR, self.session_id +
-                          ": failed to clean up agent connection (%s)" % str(ex))
-
-        self.agent = None
-        self.agent_settings = None
-
-        return
-
-    # -----------------------------------------------------------------------------------
-    #
-    # -----------------------------------------------------------------------------------
-
-    def import_file (self):
+    def import_file(self):
         '''
         Load varous object values from disk.
 
@@ -655,12 +402,219 @@ class session (pgraph.graph):
         self.total_mutant_index  = data["total_mutant_index"]
         self.pause_flag          = data["pause_flag"]
 
+    # -----------------------------------------------------------------------------------
+    #
+    # -----------------------------------------------------------------------------------
+
+    def fuzz(self, this_node=None, path=[]):
+        '''
+        Call this routine to get the ball rolling. No arguments are necessary as they are
+        both utilized internally during the recursive traversal of the session graph.
+
+        @type  this_node: request (node)
+        @param this_node: (Optional, def=None) Current node that is being fuzzed.
+        @type  path:      List
+        @param path:      (Optional, def=[]) Nodes along the path to the current one.
+        '''
+
+        # if no node is specified, we start from root and initialize the session.
+        if not this_node:
+            # we can't fuzz if we don't have at least one target and one request.
+            if not self.transport_media.media_target():
+                syslog.syslog(syslog.LOG_ERR, self.session_id +\
+                              ": no target specified for session")
+                return
+
+            if not self.edges_from(self.root.id):
+                syslog.syslog(syslog.LOG_ERR, self.session_id +\
+                              ": no request specified for session")
+                return
+
+            this_node = self.root
+
+            self.total_mutant_index  = 0
+            self.total_num_mutations = self.num_mutations()
+
+        # If no errors above and not already connected to the agent, initialize the
+        # agent connection.
+        # If the agent cannot be initialized make sure the user is aware of it.
+
+        if self.agent == None and self.agent_settings != None:
+            try:
+                self.agent = agent(self.config, self.session_id, self.agent_settings)
+                self.agent.connect()
+            except Exception, ex:
+                syslog.syslog(syslog.LOG_ERR, self.session_id +\
+                              ": failed to establish agent connection (%s)" % str(ex))
+                self.finished_flag = True
+                self.stop_flag = True
+                return
+
+        # Get the agent to execute 
+            try:
+                self.agent.start()
+            except Exception, ex:
+                syslog.syslog(syslog.LOG_ERR, self.session_id +\
+                              ": agent failed to execute command (%s)" % str(ex))
+                self.finished_flag = True
+                self.stop_flag = True
+                return
+
+            syslog.syslog(syslog.LOG_INFO, self.session_id +\
+                          ": process started, waiting 3 seconds...")
+            time.sleep(3)
+
+        # step through every edge from the current node.
+
+        for edge in self.edges_from(this_node.id):
+
+            if self.stop_flag: return 
+
+            # the destination node is the one actually being fuzzed.
+            self.fuzz_node = self.nodes[edge.dst]
+            num_mutations  = self.fuzz_node.num_mutations()
+
+            # keep track of the path as we fuzz through it, don't count the root node.
+            # we keep track of edges as opposed to nodes because if there is more then 
+            # one path through a set of given nodes we don't want any ambiguity.
+            path.append(edge)
+
+            current_path  = " -> ".join([self.nodes[e.src].name for e in path[1:]])
+            current_path += " -> %s" % self.fuzz_node.name
+
+            if self.config['general']['debug'] > 1:
+                syslog.syslog(syslog.LOG_INFO, self.session_id + \
+                              ": fuzz path: %s, fuzzed %d of %d total cases" %\
+                              (current_path, self.total_mutant_index, 
+                              self.total_num_mutations))
+
+            done_with_fuzz_node = False
+
+            # loop through all possible mutations of the fuzz node.
+
+            while not done_with_fuzz_node and not self.stop_flag:
+                # if we need to pause, do so.
+                self.pause()
+
+                # If we have exhausted the mutations of the fuzz node, break out of the 
+                # while(1). 
+                # Note: when mutate() returns False, the node has been reverted to the 
+                # default (valid) state.
+
+                if not self.fuzz_node.mutate():
+                    if self.config['general']['debug'] > 0:
+                        syslog.syslog(syslog.LOG_INFO, self.session_id +\
+                                      ": all possible mutations exhausted")
+                    done_with_fuzz_node = True
+                    continue
+
+                # make a record in the session that a mutation was made.
+
+                self.total_mutant_index += 1
+
+                # if we've hit the restart interval, restart the target.
+
+                if self.restart_interval and self.total_mutant_index % self.restart_interval == 0:
+                    if self.config['general']['debug'] > 0:
+                        syslog.syslog(syslog.LOG_WARNING,
+                                      self.session_id + ": restart interval reached")
+                    # TODO: this has to be updated properly...
+
+                    if self.agent != None and self.agent_settings != None:
+                        self.agent.start()
+
+                # if we don't need to skip the current test case.
+
+                if self.total_mutant_index > self.skip:
+                    if self.config['general']['debug'] > 1:
+                        syslog.syslog(syslog.LOG_INFO,
+                                      self.session_id + ": fuzzing %d / %d" %\
+                                      (self.fuzz_node.mutant_index, num_mutations))
+
+                    # attempt to complete a fuzz transmission. keep trying until we are 
+                    # successful, whenever a failure occurs, restart the target.
+
+                    while not self.stop_flag:
+                        try:
+                            self.transport_media.connect()
+                        except Exception, ex:
+                            self.handle_crash("fail_connection", 
+                                              "failed to connect to target, possible crash: %s" %\
+                                              str(ex))
+
+                        # if the user registered a pre-send function, pass it the sock 
+                        # and let it do the deed.
+
+                        try:
+                            if self.pre_send: self.pre_send(self.transport_media.media_socket())
+                        except Exception, ex:
+                            self.handle_crash("fail_send", 
+                                              "pre_send() failed, possible crash: %s" %\
+                                              str(ex))
+                            continue
+
+                        # send out valid requests for each node in the current path up to 
+                        # the node we are fuzzing.
+
+                        for e in path[:-1]:
+                            node = self.nodes[e.dst]
+                            if not self.transmit(node, e):
+                                continue
+
+                        # now send the current node we are fuzzing.
+
+                        if not self.transmit(self.fuzz_node, edge):
+                            continue
+
+                        # if we reach this point the send was successful for break out 
+                        # of the while(1).
+
+                        break
+
+                    try:
+                        if self.post_send: self.post_send(self.transport_media.media_socket())
+                    except Exception, ex:
+                        self.handle_crash("fail_send", 
+                                          "post_send() failed, possible crash: %s" %\
+                                          str(ex))
+                        continue
+
+                    # done with the socket.
+
+                    self.transport_media.disconnect()
+
+                    # serialize the current session state to disk.
+
+                    self.export_file()
+
+                    # delay in between test cases.
+
+                    if self.config['general']['debug'] > 2:
+                        syslog.syslog(syslog.LOG_INFO, self.session_id +\
+                                      ": sleeping for %f seconds" % self.sleep_time)
+                    time.sleep(self.sleep_time)
+
+            # recursively fuzz the remainder of the nodes in the session graph.
+
+            self.fuzz(self.fuzz_node, path)
+
+        # finished with the last node on the path, pop it off the path stack.
+
+        if path:
+            path.pop()
+
+        if self.total_mutant_index == self.total_num_mutations:
+            self.finished_flag = True
+            self.stop_flag = True
+            syslog.syslog(syslog.LOG_INFO, self.session_id + ": job finished")
+            if self.agent != None and self.agent_settings != None:
+                self.agent_cleanup()
 
     # -----------------------------------------------------------------------------------
     #
     # -----------------------------------------------------------------------------------
 
-    def num_mutations (self, this_node=None, path=[]):
+    def num_mutations(self, this_node=None, path=[]):
         '''
         Number of total mutations in the graph. The logic of this routine is identical to 
         that of fuzz(). See fuzz() for inline comments. The member varialbe
@@ -698,43 +652,7 @@ class session (pgraph.graph):
     #
     # -----------------------------------------------------------------------------------
 
-    def set_pause(self):
-        self.pause_flag = 1
-
-    # -----------------------------------------------------------------------------------
-    #
-    # -----------------------------------------------------------------------------------
-
-    def set_resume(self):
-        self.pause_flag = 0
-
-    # -----------------------------------------------------------------------------------
-    #
-    # -----------------------------------------------------------------------------------
-
-    def pause (self):
-        '''
-        If the pause flag is raised, enter an endless loop until it is lowered.
-        '''
-
-        while 1:
-            if self.pause_flag:
-                time.sleep(1)
-            else:
-                break
-
-    # -----------------------------------------------------------------------------------
-    #
-    # -----------------------------------------------------------------------------------
-
-    def terminate (self):
-        self.stop_flag = True
-
-    # -----------------------------------------------------------------------------------
-    #
-    # -----------------------------------------------------------------------------------
-
-    def transmit (self, node, edge):
+    def transmit(self, node, edge):
         '''
         Render and transmit a node, process callbacks accordingly.
 
@@ -744,40 +662,47 @@ class session (pgraph.graph):
         @param edge:   Edge along the current fuzz path from "node" to next node.
         '''
 
+        if self.config['general']['debug'] > 1:
+            syslog.syslog(syslog.LOG_INFO,
+                          self.session_id + ": transmitting [%d.%d]" %\
+                          (node.id, self.total_mutant_index))
+
         data = None
 
         # if the edge has a callback, process it. the callback has the option to render 
         # the node, modify it and return.
 
         if edge.callback:
-            data = edge.callback(self, node, edge, self.transport_media.media_socket())
-
-        if self.config['general']['debug'] > 1:
-            syslog.syslog(syslog.LOG_INFO,
-                          self.session_id + ": transmitting [%d.%d]" %\
-                          (node.id, self.total_mutant_index))
+            try:
+                data = edge.callback(self, node, edge,
+                                     self.transport_media.media_socket())
+            except Exception, ex:
+                syslog.syslog(syslog.LOG_ERR, 
+                              "failed to execute callback: %s" % str(ex))
+                return False
 
         # if no data was returned by the callback, render the node here.
         if not data:
-            data = node.render()
+            try:
+                data = node.render()
+            except Exception, ex:
+                syslog.syslog(syslog.LOG_ERR, 
+                              "failed to render node for transmit: %s" % str(ex))
+                return False
 
-        try:
-            self.internal_callback(data)
-        except Exception, ex:
-            syslog.syslog(syslog.LOG_ERR,
-                          self.session_id + ": " +\
-                          "failed to store internal state (%s)" % str(ex))
+        # syslog.syslog(syslog.LOG_INFO, "!!!!!!!! 1: " + str(data))
+        self.internal_callback(data)
+        # syslog.syslog(syslog.LOG_INFO, "!!!!!!!! 2: " + str(data))
 
         try:
             self.transport_media.send(data)
             if self.config['general']['debug'] > 1:
-                syslog.syslog(syslog.LOG_INFO, self.session_id + ": packet sent: " + repr(data) )
+                syslog.syslog(syslog.LOG_INFO, 
+                              self.session_id + ": packet sent: " + repr(data))
         except Exception, ex:
-            if self.config['general']['debug'] > 0:
-                syslog.syslog(syslog.LOG_WARNING,
-                              self.session_id + ": failed to send, socket error: %s" %\
+            self.handle_crash("fail_send", "failed to send data, possible crash: %s" %\
                               str(ex))
-            self.handle_crash("fail_send", "failed to send data, possible crash?")
+            return False
 
         # TODO: check to make sure the receive timeout is not too long...
         try:
@@ -787,12 +712,14 @@ class session (pgraph.graph):
 
         if len(self.last_recv) > 0:
             if self.config['general']['debug'] > 1:
-                syslog.syslog(syslog.LOG_INFO, self.session_id + ": received: [%d] %s" 
-                                  % (len(self.last_recv), repr(self.last_recv)) )
+                syslog.syslog(syslog.LOG_INFO,
+                              self.session_id + ": received: [%d] %s" %\
+                              (len(self.last_recv), repr(self.last_recv)))
         else:
-            if self.config['general']['debug'] > 1:
-                syslog.syslog(syslog.LOG_WARNING, self.session_id + ": nothing received on socket")
-            self.handle_crash("fail_receive", "nothing received on socket, possible crash?")
+            self.handle_crash("fail_receive",
+                              "nothing received on socket, possible crash")
+
+        return True
 
     # -----------------------------------------------------------------------------------
     #
@@ -845,8 +772,8 @@ class session (pgraph.graph):
         try:
             self.database.saveIssue(crash_data)
         except Exception, ex:
-            syslog.syslog(syslog.LOG_ERR, self.session_id +
-                              ": failed to save crash data (%s)" % str(ex))
+            syslog.syslog(syslog.LOG_ERR, self.session_id +\
+                          ": failed to save crash data (%s)" % str(ex))
 
     # -----------------------------------------------------------------------------------
     #
@@ -861,9 +788,9 @@ class session (pgraph.graph):
         configuration looks like below.
 
         "conditions": {
-            "fail_connection": ["action-1", "action-2"],
+            "fail_connection": ["handle", "custom-action-1"],
             "fail_receive": ["pass"],
-            "fail_send": ["action-1", "action-2"]
+            "fail_send": ["handle", "custom-action-2"]
         }
 
         In the sample above the keys below the condition key are the events. The
@@ -930,8 +857,6 @@ class session (pgraph.graph):
 
         if event == "fail_connection":
             self.dump_crash_data(self.previous_sent, p_status)
-            if self.previous_sent != None:
-                self.previous_sent['request'] = ""
             if process_running:
                 self.warning_count = self.warning_count + 1
             else:
@@ -942,8 +867,6 @@ class session (pgraph.graph):
 
         elif event == "fail_receive":
             self.dump_crash_data(self.current_sent, p_status)
-            if self.current_sent != None:
-                self.current_sent['request'] = ""
             if process_running:
                 self.warning_count = self.warning_count + 1
             else:
@@ -954,8 +877,6 @@ class session (pgraph.graph):
 
         else:
             self.dump_crash_data(self.previous_sent, p_status)
-            if self.previous_sent != None:
-                self.previous_sent['request'] = ""
             if process_running:
                 self.warning_count = self.warning_count + 1
             else:
@@ -975,6 +896,42 @@ class session (pgraph.graph):
     #
     # -----------------------------------------------------------------------------------
 
+    def set_pause(self):
+        self.pause_flag = 1
+
+    # -----------------------------------------------------------------------------------
+    #
+    # -----------------------------------------------------------------------------------
+
+    def set_resume(self):
+        self.pause_flag = 0
+
+    # -----------------------------------------------------------------------------------
+    #
+    # -----------------------------------------------------------------------------------
+
+    def pause(self):
+        '''
+        If the pause flag is raised, enter an endless loop until it is lowered.
+        '''
+
+        while 1:
+            if self.pause_flag:
+                time.sleep(1)
+            else:
+                break
+
+    # -----------------------------------------------------------------------------------
+    #
+    # -----------------------------------------------------------------------------------
+
+    def terminate(self):
+        self.stop_flag = True
+
+    # -----------------------------------------------------------------------------------
+    #
+    # -----------------------------------------------------------------------------------
+
     def restart_process(self):
         if not self.agent.start():
             syslog.syslog(syslog.LOG_ERR,
@@ -982,4 +939,38 @@ class session (pgraph.graph):
             self.set_pause()
             self.pause()
         return self.agent.check_alive()
+
+    # -----------------------------------------------------------------------------------
+    #
+    # -----------------------------------------------------------------------------------
+
+    def add_agent(self, a_details):
+        if "address" in a_details and "port" in a_details and "command" in a_details:
+            self.agent_settings = a_details
+            return True
+        return False
+
+    # -----------------------------------------------------------------------------------
+    #
+    # -----------------------------------------------------------------------------------
+
+    def agent_cleanup(self):
+        # If we have an agent, try to clean that up properly.
+
+        try:
+            if not self.agent.kill():
+                syslog.syslog(syslog.LOG_ERR, self.session_id +
+                              ": failed to terminate remote process")
+            self.agent.disconnect()
+            self.agent = None
+            self.agent_settings = None
+        except Exception, ex:
+            syslog.syslog(syslog.LOG_ERR, self.session_id +
+                          ": failed to clean up agent connection (%s)" % str(ex))
+
+        self.agent = None
+        self.agent_settings = None
+
+        return
+
 
