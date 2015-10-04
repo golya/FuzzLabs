@@ -345,8 +345,7 @@ class jobworker():
                                  self.job_path,
                                  self.job_id,
                                  self.job_data)
-            self.core.add_target(
-                sessions.target(self.job_data["target"]["endpoint"]))
+            self.core.add_target(self.job_data["target"]["endpoint"])
 
             if ("agent" in self.job_data["target"]):
                 rc = self.core.add_agent(self.job_data["target"]["agent"])

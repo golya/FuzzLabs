@@ -152,8 +152,8 @@ class network(media):
                 raise Exception, ["failed to bind on socket", str(e)]
 
         try:
-            self.target_address = self.target.details['address']
-            self.target_port = self.target.details['port']
+            self.target_address = self.target['address']
+            self.target_port = int(self.target['port'])
         except Exception, e:
             raise Exception, ["failed to process target details", str(e)]
 
@@ -224,8 +224,8 @@ class bluetooth(media):
             raise Exception, ["failed to create socket", str(e)]
 
         try:
-            self.target_bdaddr = self.target.details['bdaddr']
-            self.target_channel = self.target.details['channel']
+            self.target_bdaddr = self.target['bdaddr']
+            self.target_channel = self.target['channel']
         except Exception, e:
             raise Exception, ["failed to process target details", str(e)]
 
@@ -275,9 +275,9 @@ class file(media):
     # -------------------------------------------------------------------------
 
     def connect(self):
-        self.f_path = self.target.details['path']
-        self.f_name = self.target.details['filename']
-        self.f_ext = self.target.details['extension']
+        self.f_path = self.target['path']
+        self.f_name = self.target['filename']
+        self.f_ext = self.target['extension']
         if not os.path.exists(self.f_path): os.makedirs(self.f_path)
         subdir = self.f_path + "/" + str(self.session_counter / 1000)
         if subdir != self.p_sub:

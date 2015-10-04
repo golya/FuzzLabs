@@ -40,6 +40,9 @@ class DatabaseThread(threading.Thread):
         engines = db.query(Engine).filter(Engine.id == engine.id).update({Engine.active: 0})
         db.commit()
 
+        db.query(Job).filter(Job.engine_id == engine.id).delete()
+        db.commit()
+
     # -------------------------------------------------------------------------
     #
     # -------------------------------------------------------------------------

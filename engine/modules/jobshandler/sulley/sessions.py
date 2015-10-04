@@ -27,19 +27,6 @@ from classes import DatabaseHandler as db
 #
 # =======================================================================================
 
-class target:
-    '''
-    Target descriptor container.
-    '''
-
-    def __init__ (self, target, **kwargs):
-
-        self.details      = target
-
-# =======================================================================================
-#
-# =======================================================================================
-
 class connection (pgraph.edge.edge):
 
     # -----------------------------------------------------------------------------------
@@ -102,7 +89,6 @@ class session (pgraph.graph):
         self.config              = config
         self.database            = db.DatabaseHandler(self.config, self.root_dir,
                                                       self.session_id)
-        self.target              = None
         self.media               = transport['media'].lower()
         self.transport_media     = None
         self.proto               = transport['protocol'].lower()
@@ -278,16 +264,13 @@ class session (pgraph.graph):
 
     def add_target (self, target):
         '''
-        Add a target to the session. Multiple targets can be added for parallel fuzzing.
+        Add a target to the session.
 
-        @type  target: session.target
-        @param target: Target to add to session
+        @type  dictionary: endpoint data
+        @param target:     Target to add to session
         '''
 
-        # add target to internal list.
-        # Internal list is used to track multiple targets for parallel fuzzing.
-        # Transport media target is for one given thread
-        self.target = target
+        # add target 
         self.transport_media.media_target(target)
 
 
@@ -424,13 +407,13 @@ class session (pgraph.graph):
         # if no node is specified, we start from root and initialize the session.
         if not this_node:
             # we can't fuzz if we don't have at least one target and one request.
-            if not self.target:
-                syslog.syslog(syslog.LOG_ERR, self.session_id + 
+            if not self.transport_media.media_target():
+                syslog.syslog(syslog.LOG_ERR, self.session_id + \
                                   ": no target specified for session")
                 return
 
             if not self.edges_from(self.root.id):
-                syslog.syslog(syslog.LOG_ERR, self.session_id + 
+                syslog.syslog(syslog.LOG_ERR, self.session_id + \
                                   ": no request specified for session")
                 return
 
@@ -467,9 +450,6 @@ class session (pgraph.graph):
             syslog.syslog(syslog.LOG_INFO, self.session_id +
                           ": process started, waiting 3 seconds...")
             time.sleep(3)
-
-
-        target = self.target
 
         # step through every edge from the current node.
 
@@ -565,8 +545,7 @@ class session (pgraph.graph):
                         try:
                             for e in path[:-1]:
                                 node = self.nodes[e.dst]
-                                self.transmit(self.transport_media.media_socket(), node, 
-                                              e, self.transport_media.media_target())
+                                self.transmit(self.transport_media.media_socket(), node, e)
                         except Exception, ex:
                             if self.config['general']['debug'] > 0:
                                 syslog.syslog(syslog.LOG_ERR, self.session_id + 
@@ -580,8 +559,7 @@ class session (pgraph.graph):
 
                         try:
                             self.transmit(self.transport_media.media_socket(), 
-                                          self.fuzz_node, edge, 
-                                          self.transport_media.media_target())
+                                          self.fuzz_node, edge)
                         except Exception, ex:
                             if self.config['general']['debug'] > 0:
                                 syslog.syslog(syslog.LOG_ERR, self.session_id + 
@@ -772,7 +750,7 @@ class session (pgraph.graph):
     #
     # -----------------------------------------------------------------------------------
 
-    def transmit (self, sock, node, edge, target):
+    def transmit (self, sock, node, edge):
         '''
         Render and transmit a node, process callbacks accordingly.
 
@@ -782,8 +760,6 @@ class session (pgraph.graph):
         @param node:   Request/Node to transmit
         @type  edge:   Connection (pgraph.edge)
         @param edge:   Edge along the current fuzz path from "node" to next node.
-        @type  target: session.target
-        @param target: Target we are transmitting to
         '''
 
         data = None
@@ -848,7 +824,6 @@ class session (pgraph.graph):
             self.current_sent = {
                 "job_id": self.session_id,
                 "time": time.time(),
-                "target": self.target.details,
                 "name": str(self.fuzz_node.name),
                 "mutant_index": self.fuzz_node.mutant_index,
                 "process_status": {},
