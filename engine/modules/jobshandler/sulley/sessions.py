@@ -534,7 +534,7 @@ class session (pgraph.graph):
                         try:
                             for e in path[:-1]:
                                 node = self.nodes[e.dst]
-                                self.transmit(self.transport_media.media_socket(), node, e)
+                                self.transmit(node, e)
                         except Exception, ex:
                             if self.config['general']['debug'] > 0:
                                 syslog.syslog(syslog.LOG_ERR, self.session_id + 
@@ -545,8 +545,7 @@ class session (pgraph.graph):
                         # now send the current node we are fuzzing.
 
                         try:
-                            self.transmit(self.transport_media.media_socket(), 
-                                          self.fuzz_node, edge)
+                            self.transmit(self.fuzz_node, edge)
                         except Exception, ex:
                             if self.config['general']['debug'] > 0:
                                 syslog.syslog(syslog.LOG_ERR, self.session_id + 
@@ -735,12 +734,10 @@ class session (pgraph.graph):
     #
     # -----------------------------------------------------------------------------------
 
-    def transmit (self, sock, node, edge):
+    def transmit (self, node, edge):
         '''
         Render and transmit a node, process callbacks accordingly.
 
-        @type  sock:   Socket
-        @param sock:   Socket to transmit node on
         @type  node:   Request (Node)
         @param node:   Request/Node to transmit
         @type  edge:   Connection (pgraph.edge)
@@ -753,7 +750,7 @@ class session (pgraph.graph):
         # the node, modify it and return.
 
         if edge.callback:
-            data = edge.callback(self, node, edge, sock)
+            data = edge.callback(self, node, edge, self.transport_media.media_socket())
 
         if self.config['general']['debug'] > 1:
             syslog.syslog(syslog.LOG_INFO,
@@ -777,7 +774,9 @@ class session (pgraph.graph):
                 syslog.syslog(syslog.LOG_INFO, self.session_id + ": packet sent: " + repr(data) )
         except Exception, ex:
             if self.config['general']['debug'] > 0:
-                syslog.syslog(syslog.LOG_WARNING, self.session_id + ": failed to send, socket error: " + str(ex))
+                syslog.syslog(syslog.LOG_WARNING,
+                              self.session_id + ": failed to send, socket error: %s" %\
+                              str(ex))
             self.handle_crash("fail_send", "failed to send data, possible crash?")
 
         # TODO: check to make sure the receive timeout is not too long...
