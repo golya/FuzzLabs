@@ -28,12 +28,40 @@ class ModuleHandler():
 
         self.root = root
         self.config = config
-        self.lock = False
         self.loaded_modules = []
         self.modules_dir = self.root + "/modules"
         self.mtime = os.path.getmtime(self.modules_dir) * 1000000
         syslog.openlog(logoption=syslog.LOG_PID, facility=syslog.LOG_DAEMON)
         self.__init_modules()
+
+    # -------------------------------------------------------------------------
+    #
+    # -------------------------------------------------------------------------
+
+    def __init_modules(self):
+        """
+        Initial load of modules. All modules not already loaded will get
+        initialized and started.
+        """
+
+        for module_name in self.get_directories():
+            if self.is_module_loaded(module_name):
+                continue
+
+            mod = self.__load_module_by_name(module_name)
+            if not mod:
+                syslog.syslog(syslog.LOG_ERR,
+                              'failed to load module: ' + \
+                               mod["name"] + " (%s)" % str(ex))
+                continue
+
+            try:
+                mod["instance"].start()
+                self.loaded_modules.append(mod)
+            except Exception, ex:
+                syslog.syslog(syslog.LOG_ERR,
+                              'failed to start module: ' + \
+                               mod["name"] + " (%s)" % str(ex))
 
     # -------------------------------------------------------------------------
     #
@@ -70,8 +98,8 @@ class ModuleHandler():
         @return:         Whether the module has been loaded yet
         """
 
-        for loaded_module in self.loaded_modules:
-            if loaded_module['name'] == name:
+        for i, m_name in enumerate(m['name'] for m in self.loaded_modules):
+            if name == m_name:
                 return True
         return False
 
@@ -79,95 +107,25 @@ class ModuleHandler():
     #
     # -------------------------------------------------------------------------
 
-    def __init_modules(self):
-        """
-        Initial load of modules. All modules not already loaded will get 
-        initialized and started.
-        """
-
-        for module_name in self.get_directories():
-            if not self.is_module_loaded(module_name):
-                mod = self.__load_module_by_name(module_name)
-                if mod != None:
-                    try:
-                        mod["instance"].start()
-                        self.loaded_modules.append(mod)
-                    except Exception, ex:
-                        syslog.syslog(syslog.LOG_ERR,
-                                      'failed to load module: ' + \
-                                       mod["name"] + " (%s)" % str(ex))
-
-    # -------------------------------------------------------------------------
-    #
-    # -------------------------------------------------------------------------
-
-    def unload_module(self, module):
-        """
-        Unload a module. This is done by fetching the instance of each module
-        from the loaded modules list and call the stop() method of the module.
-        Once the module is stopped it gets removed from the list of loaded
-        modules.
-
-        @type  module:   Dictionary
-        @param module:   A dictionary representing a loaded module
-
-        @rtype:          Boolean
-        @return:         Whether the module has been unloaded or not
-        """
-
-        syslog.syslog(syslog.LOG_INFO, 'unloading module: ' + module["name"])
-        try:
-            while module["instance"].is_running():
-                module["instance"].stop()
-                time.sleep(1)
-        except Exception, ex:
-            syslog.syslog(syslog.LOG_ERR, 'failed to stop module: ' + \
-                              module["name"] + " (%s)" % str(ex))
-            return False
-        return True
-
-    # -------------------------------------------------------------------------
-    #
-    # -------------------------------------------------------------------------
-
     def unload_modules(self):
         """
-        Unload all modules. This is done by calling unload_module() and 
-        passing the details of the module to be unloaded.
+        Unload all modules.
         """
 
         unloaded = []
         for module in self.loaded_modules:
-            if self.unload_module(module): unloaded.append(module)
+            try:
+                while module["instance"].is_running():
+                    module["instance"].stop()
+                    time.sleep(1)
+                unloaded.append(module)
+            except Exception, ex:
+                syslog.syslog(syslog.LOG_ERR,
+                              'failed to stop module: ' + \
+                              module["name"] + " (%s)" % str(ex))
 
         for module in unloaded:
             self.loaded_modules.remove(module)
-
-    # -------------------------------------------------------------------------
-    #
-    # -------------------------------------------------------------------------
-
-    def load_module(self, module):
-        """
-        Load a single module defined by _module_. The name of the module is 
-        extracted and passed to __load_module_by_name() to get it loaded.
-
-        @type  module:   Dictionary
-        @param module:   A dictionary representing a loaded module
-
-        @rtype:          Boolean
-        @return:         Whether the module has been loaded or not
-        """
-
-        try:
-            n_mod = self.__load_module_by_name(module["name"])
-            n_mod["instance"].start()
-            self.loaded_modules.append(n_mod)
-            return True
-        except Exception, ex:
-            syslog.syslog(syslog.LOG_ERR, 'failed to load module: ' + \
-                               module["name"] + " (%s)" % str(ex))
-            return False
 
     # -------------------------------------------------------------------------
     #
@@ -184,35 +142,19 @@ class ModuleHandler():
         @return:         None = not loaded, Dictionary = loaded module
         """
 
-        if self.is_module_loaded(name):
-            syslog.syslog(syslog.LOG_WARNING, 
-                          name + ' module already loaded, skipping')
-            return None
-
-        counter = 1
-        while self.lock and counter < 10:
-            time.sleep(1)
-            counter += 1
-
-        self.lock = True
-
         syslog.syslog(syslog.LOG_INFO, "loading module " + name)
-        module_dir = self.modules_dir + "/" + name
-        if not os.path.isdir(module_dir):
-            syslog.syslog(syslog.LOG_ERR, 'module ' + name + ' not found')
-            return None
+        module_dir = os.path.join(self.modules_dir, name)
 
         l_mod = None
         try:
             sys.path.append(module_dir)
-            l_mod = __import__(name, fromlist=[name])
-            l_mod = reload(l_mod)
+            l_mod = reload(__import__(name, fromlist=[name]))
             sys.path.remove(module_dir)
         except Exception as ex:
             syslog.syslog(syslog.LOG_ERR,
                           "failed to import module " + name +\
                           " (%s)" % str(ex))
-            self.lock = False
+            sys.path.remove(module_dir)
             return None
 
         mod_details = None
@@ -228,8 +170,8 @@ class ModuleHandler():
         except Exception as ex:
             syslog.syslog(syslog.LOG_ERR,
                           "failed to load module " + name + " (%s)" % str(ex))
+            return None
 
         syslog.syslog(syslog.LOG_INFO, "module loaded: " + str(mod_details))
-        self.lock = False
         return mod_details
 
