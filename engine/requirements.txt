@@ -1,0 +1,11 @@
+Flask==0.10.1
+Flask-SQLAlchemy==2.0
+PyBluez==0.18
+PyDispatcher==2.0.5
+psutil==0.5.1
+pyOpenSSL==0.13
+pyserial==2.5
+ipaddr==2.1.10
+psutil==0.5.1
+python-daemon==1.5.5
+requests==0.12.1

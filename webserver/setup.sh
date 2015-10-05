@@ -1,10 +1,7 @@
 #!/bin/bash
 
-apt-get install python-pip python-bcrypt python-dev python-openssl python-requests
-pip install Flask
-pip install flask-login
-pip install Flask-SQLAlchemy
-pip install Flask-Bcrypt
+apt-get install python-pip python-dev
+pip install -r requirements.txt
 
 mkdir ./etc/ssl
 mkdir ./etc/database
