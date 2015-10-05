@@ -38,7 +38,6 @@ from classes.database.Job import Job
 whitelist = {}
 whitelist["id"]        = '^[0-9]*$'
 whitelist["job_id"]    = '^[a-f0-9]{32}$'
-whitelist["engine_id"] = '^[0-9]*$'
 whitelist["datetime"]  = '^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2} [0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2}$'
 whitelist["username"]  = '[^@]+@[^@]+\.[^@]+'
 whitelist["address"]   = '^[a-zA-Z0-9\.-_]{1,255}$'
@@ -433,7 +432,7 @@ def delete_job(id, job_id):
             return r
 
     job = db.session.query(Job).filter(
-                        (Job.engine_id == engine_id) &\
+                        (Job.engine_id == id) &\
                         (Job.job_id == job_id)
                         ).first()
     if job:

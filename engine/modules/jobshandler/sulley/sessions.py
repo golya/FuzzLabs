@@ -509,13 +509,7 @@ class session(pgraph.graph):
                     continue
 
                 # make a record in the session that a mutation was made.
-
-                # TODO: THIS SHOULD BE CHANGED TO WORK AS ONE OF THE WAYS BELOW:
-                #  a) PREFERRED: Send out a non-mutated request (index 0) in advance so that 
-                #     the first mutation will indeed have the index of 1.
-                #  b) LESS PREFERRED: Only increment the mutant index after a mutation.
-                #  c) LEAST PREFERRED: Start counting from -1
-
+                # TODO
                 self.total_mutant_index += 1
 
                 # if we've hit the restart interval, restart the target.
