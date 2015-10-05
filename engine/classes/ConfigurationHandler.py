@@ -27,7 +27,7 @@ class ConfigurationHandler:
 
         self.config = None
         self.file = c_path
-        self.reload()
+        self.__loadConfiguration()
 
     # -------------------------------------------------------------------------
     #
@@ -38,6 +38,9 @@ class ConfigurationHandler:
         Open the configuration file and read, then parse its content.
         """
 
+        if not os.path.isfile(self.file) or not os.access(self.file, os.R_OK):
+            raise Exception("cannot access configuration file")
+
         try:
             file_desc = open(self.file, "r")
             fcntl.flock(file_desc, fcntl.LOCK_EX)
@@ -46,46 +49,6 @@ class ConfigurationHandler:
             file_desc.close()
         except Exception, ex:
             raise Exception("failed to load configuration: " + str(ex))
-
-    # -------------------------------------------------------------------------
-    #
-    # -------------------------------------------------------------------------
-
-    def __isFileExists(self, f_name):
-        """
-        Check whether the file exists or not.
-
-        @type  f_name:   String
-        @param f_name:   Full path to the file
-
-        @rtype:          Boolean
-        @return:         Presence of the file reported as boolean
-        """
-
-        status = False
-        if os.path.isfile(f_name) and os.access(f_name, os.R_OK):
-            status = True
-        else:
-            status = False
-        return status
-
-    # -------------------------------------------------------------------------
-    #
-    # -------------------------------------------------------------------------
-
-    def reload(self):
-        """ 
-        Reload the configuration by overwriting it by calling 
-        __loadConfiguration().  
-        """
-
-        if self.__isFileExists(self.file):
-            try:
-                self.__loadConfiguration()
-            except Exception, ex:
-                raise Exception("failed to load configuration: " + str(ex))
-        else:
-            raise Exception("cannot access configuration file")
 
     # -------------------------------------------------------------------------
     #
