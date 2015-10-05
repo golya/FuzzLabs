@@ -87,8 +87,7 @@ class session(pgraph.graph):
         self.job_data            = job_data
         self.root_dir            = root_dir
         self.config              = config
-        self.database            = db.DatabaseHandler(self.config, self.root_dir,
-                                                      self.session_id)
+        self.database            = db.DatabaseHandler(self.config, self.root_dir)
         self.media               = transport['media'].lower()
         self.transport_media     = None
         self.proto               = transport['protocol'].lower()

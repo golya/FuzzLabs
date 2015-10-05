@@ -30,7 +30,6 @@ class ModuleHandler():
         self.config = config
         self.loaded_modules = []
         self.modules_dir = self.root + "/modules"
-        self.mtime = os.path.getmtime(self.modules_dir) * 1000000
         syslog.openlog(logoption=syslog.LOG_PID, facility=syslog.LOG_DAEMON)
         self.__init_modules()
 

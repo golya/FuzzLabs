@@ -13,7 +13,7 @@ class DatabaseHandler:
     #
     # -------------------------------------------------------------------------
 
-    def __init__(self, config = None, root = None, job_id = None):
+    def __init__(self, config = None, root = None):
 
         if config == None or root == None:
             return
@@ -44,13 +44,17 @@ class DatabaseHandler:
                  "process":      data.get("process_status")
                  }
 
-        n_issue = Issue(job_id=data.get("job_id"),
-                        time=time.time(),
-                        info=json.dumps(i_info),
-                        payload=data.get("request"))
+        n_issue = None
 
-        self.db.add(n_issue)
-        self.db.commit()
+        try:
+            n_issue = Issue(job_id=data.get("job_id"),
+                            time=time.time(),
+                            info=json.dumps(i_info),
+                            payload=data.get("request"))
+            self.db.add(n_issue)
+            self.db.commit()
+        except Exception, ex:
+            return False
 
         return True
 
@@ -104,6 +108,13 @@ class DatabaseHandler:
         """
 
         issue = self.db.query(Issue).filter_by(id=id).first()
-        self.db.delete(issue)
-        self.db.commit()
+        if not issue:
+            return False
+        try:
+            self.db.delete(issue)
+            self.db.commit()
+        except Exception, ex:
+            return False
+        return True
+
 
