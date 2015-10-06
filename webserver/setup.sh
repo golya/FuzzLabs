@@ -1,8 +1,12 @@
 #!/bin/bash
 
+
+#!/bin/bash
+
+# Essentials
 apt-get update
 apt-get upgrade
-apt-get install python-pip python-dev
+apt-get install python-pip python-sqlite python-dev libffi-dev libxml2-dev libxslt1-dev lib32z1-dev libssl-dev
 pip install -r requirements.txt
 
 mkdir ./etc/ssl
