@@ -1,8 +1,5 @@
 #!/bin/bash
 
-
-#!/bin/bash
-
 # Essentials
 apt-get update
 apt-get upgrade
