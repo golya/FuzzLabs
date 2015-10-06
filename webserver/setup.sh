@@ -1,5 +1,7 @@
 #!/bin/bash
 
+apt-get update
+apt-get upgrade
 apt-get install python-pip python-dev
 pip install -r requirements.txt
 
